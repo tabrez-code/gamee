@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>IRON SECTOR — Tactical FPS</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#06090e;color:#e7eef5;font-family:system-ui,sans-serif;overflow:hidden}
+button,select{font:inherit}
+button{cursor:pointer;touch-action:manipulation}
+button:focus-visible,select:focus-visible{outline:3px solid #76e6ff;outline-offset:4px}
+#stage{position:fixed;inset:0;display:grid;place-items:center;background:#06090e}
+canvas{width:100%;height:100%;object-fit:contain;display:block}
+#hud{position:fixed;inset:0;pointer-events:none;padding:22px;display:flex;flex-direction:column;justify-content:space-between}
+.row{display:flex;justify-content:space-between;align-items:start;gap:15px}
+.box{background:#0a1420d9;border:1px solid #9bbacc28;border-radius:10px;padding:12px 16px;backdrop-filter:blur(8px)}
+.label{font-size:10px;letter-spacing:2px;color:#9badbd}
+.value{font-weight:800;font-size:22px}
+#health{color:#77efc4}
+#ammo{color:#ffe4aa}
+#notice{text-align:center;color:#fff0bf;font-size:14px;text-shadow:0 2px 4px #000;min-height:22px}
+#hud button{pointer-events:auto}
+.smallButton{background:#142434;color:#dcecf4;border:1px solid #526276;border-radius:7px;padding:9px 13px}
+#menu{position:fixed;inset:0;z-index:10;background:#030911d9;backdrop-filter:blur(14px);display:grid;place-items:center;padding:20px;overflow:auto}
+.panel{width:min(620px,100%);border:1px solid #698ba747;border-radius:20px;padding:clamp(22px,5vw,42px);background:linear-gradient(140deg,#182636,#0b111a);box-shadow:0 30px 100px #0008}
+.kicker{color:#79dfeb;font-size:11px;letter-spacing:4px}
+h1{font-size:clamp(35px,8vw,62px);letter-spacing:-3px;margin:8px 0}
+p{color:#aebfcd;line-height:1.7}
+label{display:block;font-size:12px;color:#c3d4df;margin-bottom:8px}
+select{width:100%;padding:12px;background:#101d2a;color:white;border:1px solid #496074;border-radius:8px;margin-bottom:18px}
+.primary{border:0;background:#8de6ec;color:#09212b;font-weight:800;border-radius:8px;padding:14px 20px}
+.buttons{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.help{font-size:12px;line-height:1.9}
+#touch{position:fixed;inset:0;pointer-events:none;display:none}
+#stick{position:absolute;bottom:110px;left:25px;width:112px;height:112px;border-radius:50%;background:#ffffff10;border:1px solid #ffffff40;pointer-events:auto;touch-action:none}
+#knob{position:absolute;left:36px;top:36px;width:40px;height:40px;border-radius:50%;background:#bce9f670}
+#look{position:absolute;right:0;top:20%;width:48%;height:42%;pointer-events:auto;touch-action:none}
+#touchActions{position:absolute;bottom:110px;right:20px;display:grid;grid-template-columns:repeat(2,65px);gap:9px;pointer-events:auto}
+#touchActions button{height:52px;color:white;background:#172939b8;border:1px solid #9ac4d266;border-radius:12px;touch-action:none}
+#touchActions #fire{background:#ad5238b8;grid-row:span 2;height:113px}
+[hidden]{display:none!important}
+@media(pointer:coarse){#touch{display:block}#hud{padding:12px}.box{padding:8px 11px}.value{font-size:18px}}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="screen" width="800" height="450" aria-label="First-person shooting game"></canvas></div>
+<div id="hud" hidden>
+  <div class="row">
+    <div class="box"><div class="label">OPERATION</div><strong id="mapName"></strong><div id="objective" class="label"></div></div>
+    <button id="pause" class="smallButton">Pause</button>
+  </div>
+  <div id="notice" role="status"></div>
+  <div class="row">
+    <div class="box"><div class="label">ARMOR / HEALTH</div><div id="health" class="value"></div></div>
+    <div class="box" style="text-align:right"><div id="weapon" class="label"></div><div id="ammo" class="value"></div><div id="reloadText" class="label"></div></div>
+  </div>
+</div>
+
+<div id="touch" hidden>
+  <div id="look" aria-label="Drag to aim"></div>
+  <div id="stick" aria-label="Movement joystick"><div id="knob"></div></div>
+  <div id="touchActions">
+    <button id="fire" aria-label="Fire weapon">FIRE</button>
+    <button id="mobileReload">R</button>
+    <button id="mobileWeapon">GUN</button>
+  </div>
+</div>
+
+<div id="menu">
+  <div class="panel">
+    <div class="kicker">OFFLINE / SINGLE PLAYER / FPS</div>
+    <h1>IRON SECTOR</h1>
+    <p id="menuText">Clear the sector. Hostile security units patrol, investigate, pursue and attack. Use cover, manage ammunition and collect supply drops.</p>
+    <label for="mapSelect">DEPLOYMENT ZONE</label>
+    <select id="mapSelect">
+      <option value="0">01 — Blacksite / Industrial corridors</option>
+      <option value="1">02 — Sandstorm / Open courtyard</option>
+      <option value="2">03 — Dockyard / Container lanes</option>
+    </select>
+    <label for="difficulty">DIFFICULTY</label>
+    <select id="difficulty">
+      <option value="0">Recruit</option>
+      <option value="1" selected>Operator</option>
+      <option value="2">Veteran</option>
+    </select>
+    <div class="help">
+      WASD move · Mouse / ← → aim · Shift sprint<br>
+      Click / Space fire · R reload · 1–4 guns · Q cycle · P pause<br>
+      Mobile: left joystick moves; swipe the right area to aim.<br>
+      Weapons: pistol, assault rifle, shotgun, marksman rifle.
+    </div>
+    <div class="buttons">
+      <button id="deploy" class="primary">DEPLOY</button>
+      <button id="resume" class="smallButton" hidden>RESUME</button>
+      <button id="sound" class="smallButton">Sound: ON</button>
+    </div>
+    <p class="help" id="compatibility">Desktop recommended. Simplified raycast 3D with procedural graphics and audio.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const canvas=$("screen"),ctx=canvas.getContext("2d");
+const W=800,H=450,N=20,TAU=Math.PI*2,FOV=Math.PI/3;
+const focal=W/(2*Math.tan(FOV/2));
+const coarse=matchMedia("(pointer:coarse)").matches;
+const reduced=matchMedia("(prefers-reduced-motion:reduce)").matches;
+let state="menu",map,theme,player,enemies=[],drops=[],freeCells=[];
+let keys={},mouseDown=false,aimX=0,aimY=0;
+let currentGun=1,ammo=[],reserve=[],reload=0,cooldown=0;
+let kills=0,total=0,difficulty=1,time=0,kick=0,flash=0,hurt=0,hitMarker=0;
+let noticeTimer=0,walking=0,last=performance.now(),soundEnabled=true,audio;
+let joy={x:0,y:0},joyPointer=null,lookPointer=null,lastLook={x:0,y:0};
+const depth=new Float32Array(W);
+const guns=[
+  {name:"01 / V9 SIDEARM",mag:12,stock:72,damage:38,delay:.29,load:1.05,spread:.010,pellets:1,auto:false,color:"#9ba7af"},
+  {name:"02 / AR-32 RIFLE",mag:30,stock:180,damage:25,delay:.105,load:1.55,spread:.020,pellets:1,auto:true,color:"#596975"},
+  {name:"03 / BREACH SHOTGUN",mag:7,stock:42,damage:23,delay:.8,load:1.9,spread:.095,pellets:7,auto:false,color:"#786454"},
+  {name:"04 / M12 MARKSMAN",mag:6,stock:36,damage:105,delay:1.05,load:1.8,spread:.003,pellets:1,auto:false,color:"#63796c"}
+];
+const themes=[
+  {name:"BLACKSITE",wall:"#536675",light:"#99c8d8",sky:"#101a26",floor:"#252f35",fog:"#101a24",type:0},
+  {name:"SANDSTORM",wall:"#ac9270",light:"#ebd19e",sky:"#869da7",floor:"#70604c",fog:"#baa184",type:1},
+  {name:"DOCKYARD",wall:"#506a72",light:"#c1dbe3",sky:"#1c3446",floor:"#293c47",fog:"#263c4b",type:2}
+];
+function wrapAngle(a){return Math.atan2(Math.sin(a),Math.cos(a))}
+function say(text,seconds=2){$("notice").textContent=text;noticeTimer=seconds}
+function wall(x,y){
+  const ix=Math.floor(x),iy=Math.floor(y);
+  return ix<0||iy<0||ix>=N||iy>=N?1:map[iy][ix];
+}
+function clearAt(x,y,r=.2){
+  return !wall(x-r,y-r)&&!wall(x+r,y-r)&&!wall(x-r,y+r)&&!wall(x+r,y+r);
+}
+function move(body,dx,dy,r=.2){
+  if(clearAt(body.x+dx,body.y,r))body.x+=dx;
+  if(clearAt(body.x,body.y+dy,r))body.y+=dy;
+}
+function makeMap(id){
+  map=Array.from({length:N},(_,y)=>Array.from({length:N},(_,x)=>
+    x===0||y===0||x===N-1||y===N-1?1:0));
+  const rect=(x,y,w,h,v=1)=>{
+    for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)map[j][i]=v;
+  };
+  if(id===0){
+    rect(5,1,1,14);rect(10,5,1,14);rect(15,1,1,14);
+    rect(1,9,4,1);rect(6,5,4,1);rect(11,13,4,1);rect(16,7,3,1);
+    [[5,4],[5,11],[10,8],[10,16],[15,4],[15,11],[3,9],[8,5],[13,13],[17,7]]
+      .forEach(([x,y])=>map[y][x]=0);
+    rect(7,12,2,2,2);rect(12,3,2,2,2);
+  }else if(id===1){
+    rect(7,7,6,6);rect(8,8,4,4,0);
+    [[9,7],[10,7],[12,9],[12,10],[9,12],[10,12],[7,9],[7,10]]
+      .forEach(([x,y])=>map[y][x]=0);
+    [[4,4],[14,4],[4,14],[14,14]].forEach(([x,y])=>rect(x,y,2,2,2));
+    rect(2,9,3,1);rect(15,9,3,1);rect(9,2,1,3);rect(9,15,1,3);
+  }else{
+    [[4,3,2,5],[8,2,2,5],[12,4,2,5],[16,2,2,5],
+     [3,12,4,2],[8,10,2,6],[12,12,2,5],[16,10,2,6]]
+      .forEach((r,i)=>rect(...r,1+i%2));
+  }
+  freeCells=[];
+  for(let y=1;y<N-1;y++)for(let x=1;x<N-1;x++)
+    if(!map[y][x])freeCells.push({x:x+.5,y:y+.5});
+}
+
+// Grid pathfinding gives NPCs routes around walls.
+function pathTo(sx,sy,gx,gy){
+  sx=Math.floor(sx);sy=Math.floor(sy);gx=Math.floor(gx);gy=Math.floor(gy);
+  const start=sy*N+sx,goal=gy*N+gx;
+  if(start===goal)return [];
+  const prev=new Int32Array(N*N).fill(-1),queue=[start];
+  prev[start]=start;
+  for(let k=0;k<queue.length;k++){
+    const v=queue[k],x=v%N,y=Math.floor(v/N);
+    if(v===goal)break;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx,ny=y+dy,nv=ny*N+nx;
+      if(nx<1||ny<1||nx>=N-1||ny>=N-1||map[ny][nx]||prev[nv]!==-1)continue;
+      prev[nv]=v;queue.push(nv);
+    }
+  }
+  if(prev[goal]===-1)return [];
+  const result=[];
+  for(let at=goal;at!==start;at=prev[at])
+    result.push({x:at%N+.5,y:Math.floor(at/N)+.5});
+  return result.reverse();
+}
+function lineOfSight(ax,ay,bx,by){
+  const d=Math.hypot(bx-ax,by-ay),steps=Math.ceil(d/.09);
+  for(let i=1;i<steps;i++)
+    if(wall(ax+(bx-ax)*i/steps,ay+(by-ay)*i/steps))return false;
+  return true;
+}
+
+// Procedural wall textures.
+function texture(type,id){
+  const c=document.createElement("canvas");c.width=c.height=64;
+  const g=c.getContext("2d");g.fillStyle=themes[id].wall;g.fillRect(0,0,64,64);
+  let seed=39+id*77+type*21;
+  const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+  for(let i=0;i<1300;i++){
+    g.fillStyle=rnd()>.5?"#ffffff0d":"#00000015";
+    g.fillRect(rnd()*64,rnd()*64,1+rnd()*3,1+rnd()*2);
+  }
+  g.strokeStyle="#00000055";g.lineWidth=2;
+  if(id===1){
+    for(let y=0;y<64;y+=16){
+      g.beginPath();g.moveTo(0,y);g.lineTo(64,y);g.stroke();
+      for(let x=(y%32?16:0);x<64;x+=32)g.strokeRect(x,y,32,16);
+    }
+  }else{
+    for(let x=0;x<64;x+=id===2?8:32){
+      g.fillStyle="#ffffff13";g.fillRect(x,0,2,64);
+      g.fillStyle="#00000035";g.fillRect(x+3,0,2,64);
+    }
+    g.fillStyle="#080f1788";g.fillRect(0,47,64,9);
+    g.fillStyle=type===2?"#ddad55":"#78b5c4";g.fillRect(0,48,64,3);
+    g.fillStyle="#d0d7d8";[[5,5],[58,5],[5,59],[58,59]].forEach(([x,y])=>g.fillRect(x,y,2,2));
+  }
+  if(type===2){
+    g.fillStyle="#111b2260";g.fillRect(0,0,64,64);
+    g.strokeStyle="#e7b457";g.strokeRect(7,8,50,48);
+  }
+  return c;
+}
+let textures=[];
+
+// Armored security unit billboard, not external artwork.
+function unitTexture(){
+  const c=document.createElement("canvas");c.width=64;c.height=96;
+  const g=c.getContext("2d");
+  g.fillStyle="#0005";g.beginPath();g.ellipse(32,91,24,4,0,0,TAU);g.fill();
+  g.fillStyle="#273541";g.fillRect(19,61,11,30);g.fillRect(35,61,11,30);
+  g.fillStyle="#16212c";g.fillRect(16,85,16,8);g.fillRect(34,85,16,8);
+  g.fillStyle="#667780";g.fillRect(16,28,33,37);
+  g.fillStyle="#334956";g.fillRect(21,32,23,26);
+  g.fillStyle="#8ca3ab";g.fillRect(21,33,23,4);g.fillRect(23,43,19,4);
+  g.fillStyle="#455966";g.fillRect(8,30,11,30);g.fillRect(46,30,11,30);
+  g.fillStyle="#263746";g.fillRect(19,5,27,23);
+  g.fillStyle="#81939b";g.fillRect(20,4,25,5);
+  g.fillStyle="#ff795d";g.fillRect(22,13,21,5);
+  g.fillStyle="#111820";g.fillRect(12,47,43,8);g.fillRect(27,48,7,15);
+  g.fillStyle="#74898f";g.fillRect(15,46,31,2);
+  return c;
+}
+const unit=unitTexture();
+
+function initialize(){
+  const id=Number($("mapSelect").value);
+  difficulty=Number($("difficulty").value);
+  theme=themes[id];makeMap(id);textures=[null,texture(1,id),texture(2,id)];
+  player={x:2.5,y:2.5,a:.25,pitch:0,hp:100};
+  enemies=[];drops=[];kills=0;total=6+difficulty*3;
+  const candidates=freeCells.filter(c=>Math.hypot(c.x-player.x,c.y-player.y)>7);
+  for(let i=candidates.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
+  }
+  for(const cell of candidates){
+    if(enemies.length===total)break;
+    if(enemies.some(e=>Math.hypot(e.x-cell.x,e.y-cell.y)<1.8))continue;
+    if(!pathTo(player.x,player.y,cell.x,cell.y).length)continue;
+    enemies.push({...cell,hp:100,shot:1+Math.random(),path:[],think:Math.random(),
+      target:null,alert:0,flash:0,hit:0});
+  }
+  total=enemies.length;
+  ammo=guns.map(g=>g.mag);reserve=guns.map(g=>g.stock);
+  currentGun=1;cooldown=reload=kick=flash=hurt=hitMarker=0;
+  time=walking=0;
+  $("mapName").textContent=theme.name;
+  $("resume").hidden=false;
+  start();
+  say("Clear the sector • Supply drops restore health and ammo",4);
+}
+
+function clearInput(){
+  keys={};mouseDown=false;joy={x:0,y:0};aimX=aimY=0;
+  joyPointer=lookPointer=null;
+  $("knob").style.transform="";
+}
+function unlock(){
+  if(document.pointerLockElement===canvas)document.exitPointerLock();
+}
+function requestLock(){
+  if(coarse||!canvas.requestPointerLock)return;
+  try{
+    const result=canvas.requestPointerLock();
+    if(result&&result.catch)result.catch(()=>say("Mouse lock unavailable: drag to aim, or use arrow keys",5));
+  }catch{say("Use arrow keys or drag the view to aim",4)}
+}
+function start(){
+  clearInput();state="playing";
+  $("menu").hidden=true;$("hud").hidden=false;$("touch").hidden=false;
+  requestLock();ensureAudio();
+}
+function pause(){
+  if(state!=="playing")return;
+  state="paused";clearInput();unlock();
+  $("menuText").textContent="Mission paused. Resume your run or deploy to a new map.";
+  $("menu").hidden=false;$("touch").hidden=true;$("resume").hidden=false;
+}
+function finish(won){
+  state=won?"won":"lost";clearInput();unlock();
+  $("menu").hidden=false;$("touch").hidden=true;$("resume").hidden=true;
+  $("deploy").textContent="DEPLOY AGAIN";
+  $("menuText").textContent=won
+    ?`SECTOR SECURED — ${kills} hostiles neutralized in ${Math.floor(time)} seconds. Try another map or a higher difficulty.`
+    :`MISSION FAILED — ${kills}/${total} hostiles neutralized. Use cover and collect the green supply drops.`;
+}
+$("deploy").onclick=initialize;
+$("resume").onclick=()=>{if(state==="paused")start()};
+$("pause").onclick=pause;
+$("sound").onclick=()=>{
+  soundEnabled=!soundEnabled;
+  $("sound").textContent=`Sound: ${soundEnabled?"ON":"OFF"}`;
+  if(soundEnabled)ensureAudio();
+};
+
+// Short synthesized effects, triggered only after interaction.
+function ensureAudio(){
+  if(!soundEnabled)return;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    if(!audio)audio=new AC();
+    if(audio.state==="suspended")audio.resume().catch(()=>{});
+  }catch{}
+}
+function beep(freq,duration,volume=.04,type="triangle"){
+  if(!soundEnabled||!audio||audio.state!=="running")return;
+  const o=audio.createOscillator(),g=audio.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*.3),audio.currentTime+duration);
+  g.gain.setValueAtTime(volume,audio.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+duration);
+  o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+duration);
+  o.onended=()=>{o.disconnect();g.disconnect()};
+}
+function shotSound(){
+  if(!soundEnabled||!audio||audio.state!=="running")return;
+  const length=Math.floor(audio.sampleRate*.13),buffer=audio.createBuffer(1,length,audio.sampleRate);
+  const data=buffer.getChannelData(0);
+  for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/length,3);
+  const source=audio.createBufferSource(),g=audio.createGain();
+  source.buffer=buffer;g.gain.value=currentGun===2?.23:.13;
+  source.connect(g);g.connect(audio.destination);source.start();
+  source.onended=()=>{source.disconnect();g.disconnect()};
+  beep(currentGun===2?95:145,.12,.075,"triangle");
+}
+function selectGun(index){
+  if(state!=="playing"||index===currentGun)return;
+  currentGun=index;reload=0;cooldown=Math.max(cooldown,.2);kick=.25;
+  beep(330,.045,.015);
+}
+function startReload(){
+  if(state!=="playing"||reload>0)return;
+  const g=guns[currentGun];
+  if(ammo[currentGun]===g.mag)return;
+  if(!reserve[currentGun]){say("No reserve ammo — collect supplies");return}
+  reload=g.load;beep(220,.08,.025,"square");
+}
+function fireWeapon(){
+  if(state!=="playing"||cooldown>0||reload>0)return;
+  const g=guns[currentGun];
+  if(ammo[currentGun]<=0){startReload();return}
+  ammo[currentGun]--;cooldown=g.delay;flash=.075;kick=1;shotSound();
+  enemies.forEach(e=>{
+    if(e.hp>0&&Math.hypot(e.x-player.x,e.y-player.y)<8){
+      e.alert=6;e.target={x:player.x,y:player.y};
+    }
+  });
+  for(let pellet=0;pellet<g.pellets;pellet++){
+    const angle=player.a+(Math.random()-.5)*g.spread*2;
+    let best=null,bestD=Infinity;
+    for(const e of enemies){
+      if(e.hp<=0)continue;
+      const d=Math.hypot(e.x-player.x,e.y-player.y);
+      const relative=wrapAngle(Math.atan2(e.y-player.y,e.x-player.x)-angle);
+      const forward=d*Math.cos(relative);
+      if(forward<.15||Math.abs(relative)>Math.atan2(.28,d))continue;
+      // Vertical screen test allows mouse up/down aiming.
+      const head=H/2+player.pitch-.44*focal/forward;
+      const feet=H/2+player.pitch+.5*focal/forward;
+      if(H/2<head||H/2>feet)continue;
+      if(d<bestD&&lineOfSight(player.x,player.y,e.x,e.y)){best=e;bestD=d}
+    }
+    if(best){
+      const damage=g.damage*(currentGun===2?Math.max(.3,1-bestD/18):1);
+      best.hp-=damage;best.hit=.14;hitMarker=.18;
+      if(best.hp<=0){
+        kills++;drops.push({x:best.x,y:best.y});beep(600,.07,.025);
+        if(kills===total){finish(true);break}
+      }
+    }
+  }
+}
+function update(dt){
+  if(state!=="playing")return;
+  time+=dt;
+  cooldown=Math.max(0,cooldown-dt);flash=Math.max(0,flash-dt);
+  kick=Math.max(0,kick-dt*5);hurt=Math.max(0,hurt-dt);
+  hitMarker=Math.max(0,hitMarker-dt);
+  if(noticeTimer>0){noticeTimer-=dt;if(noticeTimer<=0)$("notice").textContent=""}
+  if(reload>0){
+    reload-=dt;
+    if(reload<=0){
+      const amount=Math.min(guns[currentGun].mag-ammo[currentGun],reserve[currentGun]);
+      ammo[currentGun]+=amount;reserve[currentGun]-=amount;
+      beep(440,.05,.025);
+    }
+  }
+  player.a=wrapAngle(player.a+aimX+(!!keys.ArrowRight-!!keys.ArrowLeft)*dt*1.9);
+  player.pitch=Math.max(-100,Math.min(100,player.pitch-aimY));
+  aimX=aimY=0;
+  let forward=(!!keys.KeyW-!!keys.KeyS)-joy.y;
+  let side=(!!keys.KeyD-!!keys.KeyA)+joy.x;
+  const magnitude=Math.hypot(forward,side);
+  if(magnitude>1){forward/=magnitude;side/=magnitude}
+  const speed=(keys.ShiftLeft||keys.ShiftRight?3.45:2.35)*dt;
+  move(player,(Math.cos(player.a)*forward-Math.sin(player.a)*side)*speed,
+    (Math.sin(player.a)*forward+Math.cos(player.a)*side)*speed);
+  walking=magnitude>.05?walking+dt*10:0;
+  if((mouseDown||keys.Space)&&guns[currentGun].auto)fireWeapon();
+
+  for(const e of enemies){
+    if(e.hp<=0)continue;
+    const dist=Math.hypot(e.x-player.x,e.y-player.y);
+    const sees=dist<12&&lineOfSight(e.x,e.y,player.x,player.y);
+    e.flash=Math.max(0,e.flash-dt);e.hit=Math.max(0,e.hit-dt);
+    e.alert=Math.max(0,e.alert-dt);e.shot-=dt;e.think-=dt;
+    if(sees){e.alert=5;e.target={x:player.x,y:player.y}}
+    if(e.think<=0){
+      e.think=.55+Math.random()*.35;
+      if(!e.target||(!e.alert&&Math.hypot(e.x-e.target.x,e.y-e.target.y)<.8)){
+        e.target=freeCells[Math.floor(Math.random()*freeCells.length)];
+      }
+      e.path=pathTo(e.x,e.y,e.target.x,e.target.y);
+    }
+    if(!(sees&&dist<4.5)&&e.path.length){
+      const next=e.path[0],dx=next.x-e.x,dy=next.y-e.y,d=Math.hypot(dx,dy);
+      if(d<.12)e.path.shift();
+      else{
+        const step=Math.min(d,dt*(e.alert?1.1+difficulty*.16:.65));
+        move(e,dx/d*step,dy/d*step,.18);
+      }
+    }
+    if(sees&&dist<10&&e.shot<=0){
+      e.shot=1.35-difficulty*.2+Math.random()*.45;e.flash=.13;
+      beep(100,.06,.016);
+      const chance=Math.max(.15,.76-dist*.045);
+      if(Math.random()<chance){
+        player.hp-=difficulty===0?5:difficulty===1?8:12;
+        hurt=.25;
+        if(player.hp<=0){player.hp=0;finish(false);break}
+      }
+    }
+  }
+  for(let i=drops.length-1;i>=0;i--){
+    if(Math.hypot(drops[i].x-player.x,drops[i].y-player.y)<.7){
+      drops.splice(i,1);player.hp=Math.min(100,player.hp+18);
+      reserve=reserve.map((r,i)=>Math.min(guns[i].stock,r+guns[i].mag));
+      say("SUPPLIES  +18 health / ammunition");beep(740,.12,.04);
+    }
+  }
+  $("health").textContent=`${Math.ceil(player.hp)} HP`;
+  $("weapon").textContent=guns[currentGun].name;
+  $("ammo").textContent=`${ammo[currentGun]} / ${reserve[currentGun]}`;
+  $("objective").textContent=`HOSTILES ${kills}/${total} • ${Math.floor(time)}s`;
+  $("reloadText").textContent=reload>0?"RELOADING…":"R RELOAD  •  1–4 SWITCH";
+}
+
+// DDA wall raycast.
+function cast(angle){
+  const dx=Math.cos(angle),dy=Math.sin(angle);
+  let mx=Math.floor(player.x),my=Math.floor(player.y);
+  const ddx=Math.abs(1/dx),ddy=Math.abs(1/d
